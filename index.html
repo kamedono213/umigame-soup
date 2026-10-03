@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ウミガメのスープ</title>
+  <meta name="theme-color" content="#2f5f6f">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ウミガメ">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app"></div>
+  <nav id="bottomTabbar" class="bottom-tabbar">
+    <button type="button" data-tab="battle"><span data-no-reading="true">🐢</span><span>バトル</span></button>
+    <button type="button" data-tab="data"><span data-no-reading="true">📊</span><span>データ</span></button>
+  </nav>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
