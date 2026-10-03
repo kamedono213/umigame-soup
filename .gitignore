@@ -1,0 +1,4 @@
+node_modules/
+data_raw/
+build_puzzles.js
+.DS_Store
