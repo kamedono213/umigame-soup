@@ -1,4 +1,4 @@
-const CACHE_NAME = 'umigame-soup-v2';
+const CACHE_NAME = 'umigame-soup-v3';
 const APP_SHELL = [
   './',
   './index.html',
