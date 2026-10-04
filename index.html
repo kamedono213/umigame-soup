@@ -19,6 +19,22 @@
     <button type="button" data-tab="battle"><span data-no-reading="true">🐢</span><span>バトル</span></button>
     <button type="button" data-tab="data"><span data-no-reading="true">📊</span><span>データ</span></button>
   </nav>
+  <button id="chatBar" type="button" class="chat-bar" hidden>
+    <span class="chat-bar-icon" data-no-reading="true">💬</span>
+    <span id="chatBarPreview" class="chat-bar-preview">チャット</span>
+    <span id="chatBarBadge" class="chat-bar-badge" hidden>0</span>
+  </button>
+  <div id="chatPanel" class="chat-panel" hidden>
+    <div class="chat-panel-head">
+      <span>チャット</span>
+      <button id="chatCloseBtn" type="button" class="chat-close-btn">✕</button>
+    </div>
+    <div id="chatMessages" class="chat-messages"></div>
+    <form id="chatForm" class="chat-form">
+      <input id="chatInput" type="text" placeholder="メッセージを入力" autocomplete="off" maxlength="300">
+      <button type="submit" class="chat-send-btn">送信</button>
+    </form>
+  </div>
   <div id="toast" class="toast" hidden></div>
   <script type="module" src="./src/app.js"></script>
 </body>

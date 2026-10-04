@@ -145,3 +145,42 @@ textarea { font: inherit; }
 .game-date { font-size: .72rem; color: var(--muted); flex: 0 0 auto; }
 .game-row-body { padding: 0 14px 14px; }
 .delete-game-btn { margin-top: 10px; width: 100%; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; background: transparent; color: var(--incorrect); font-weight: 700; }
+
+/* バトル中のチャット: タブバーのすぐ上に細いバーを常駐させ、押すと全画面パネルが開く */
+body.in-room { padding-bottom: calc(68px + 44px + env(safe-area-inset-bottom)); }
+body.in-room .action-area { bottom: calc(76px + 44px + env(safe-area-inset-bottom)); }
+
+.chat-bar {
+  position: fixed; left: 0; right: 0; bottom: calc(68px + env(safe-area-inset-bottom)); height: 44px;
+  display: flex; align-items: center; gap: 8px; padding: 0 16px; border: none; border-top: 1px solid var(--line);
+  background: var(--surface-2); color: var(--muted); z-index: 12; text-align: left;
+}
+.chat-bar[hidden] { display: none; }
+.chat-bar-icon { font-size: 1.05rem; }
+.chat-bar-preview { flex: 1; min-width: 0; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-bar-badge { background: var(--warm); color: #fff; font-size: .7rem; font-weight: 800; border-radius: 999px; padding: 2px 7px; flex: 0 0 auto; }
+
+.chat-panel {
+  position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column;
+}
+.chat-panel[hidden] { display: none; }
+.chat-panel-head {
+  display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
+  padding-top: calc(14px + env(safe-area-inset-top)); border-bottom: 1px solid var(--line);
+  background: var(--surface); font-weight: 800;
+}
+.chat-close-btn { border: none; background: none; font-size: 1.15rem; color: var(--muted); padding: 4px 8px; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { max-width: 78%; padding: 9px 13px; border-radius: 16px; font-size: .9rem; line-height: 1.4; word-break: break-word; }
+.chat-msg.is-me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.chat-msg.is-them { align-self: flex-start; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.chat-form {
+  display: flex; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.chat-form input {
+  flex: 1; min-width: 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface-2); color: var(--ink); font-size: .92rem;
+}
+.chat-send-btn { border: none; background: var(--accent); color: #fff; font-weight: 800; padding: 0 18px; border-radius: 999px; font-size: .88rem; }
+.chat-send-btn:disabled { opacity: .5; }

@@ -2,6 +2,7 @@ import {
   createRoom, joinRoom, subscribeToRoom, selectPuzzle,
   submitPending, answerQuestion, judgeGuess,
   requestEndGame, cancelEndRequest, approveEndGame, startNextRound,
+  sendChatMessage,
   getClientId,
 } from './room.js';
 import { listGames, putGame, deleteGame } from './db.js';
@@ -35,6 +36,8 @@ const state = {
   freeAnswerMode: false, // 質問への自由回答入力欄を開いているか
   dataGames: [],
   savedEndedKey: null,
+  chatOpen: false,
+  chatSeenCount: 0, // パネルを開いて既読にした時点でのチャット件数(未読バッジ算出用)
 };
 
 function myRole(room) {
@@ -164,6 +167,7 @@ function enterRoom(code) {
     }
     if (prevPhase !== room.phase && room.phase === 'playing') state.freeAnswerMode = false;
     render();
+    updateChatUi(room);
   });
   render();
 }
@@ -175,6 +179,65 @@ function leaveRoom() {
   state.room = null;
   clearActiveRoom();
   render();
+  closeChatPanel();
+  state.chatSeenCount = 0;
+  updateChatUi(null);
+}
+
+// ------------------------------------------------------------------
+// バトル中のチャット(画面下のバーを押すと全画面パネルが開く)。
+// 相手がいる部屋(guestId確定後)でだけ使える。質問ログとは別枠の自由会話。
+// ------------------------------------------------------------------
+function chatBarEl() { return $('chatBar'); }
+
+function updateChatUi(room) {
+  const inRoom = !!(room && room.guestId);
+  document.body.classList.toggle('in-room', inRoom);
+  const bar = chatBarEl();
+  bar.hidden = !inRoom;
+  if (!inRoom) {
+    closeChatPanel();
+    return;
+  }
+  const chat = room.chat || [];
+  const last = chat[chat.length - 1];
+  $('chatBarPreview').textContent = last
+    ? `${last.from === myRole(room) ? 'あなた' : '相手'}: ${last.text}`
+    : 'チャット';
+  const badge = $('chatBarBadge');
+  if (state.chatOpen) {
+    state.chatSeenCount = chat.length;
+    badge.hidden = true;
+    renderChatMessages(room);
+  } else {
+    const unread = chat.length - state.chatSeenCount;
+    badge.hidden = unread <= 0;
+    if (unread > 0) badge.textContent = String(unread);
+  }
+}
+
+function renderChatMessages(room) {
+  const role = myRole(room);
+  const list = $('chatMessages');
+  list.innerHTML = (room.chat || []).map((m) => `
+    <div class="chat-msg ${m.from === role ? 'is-me' : 'is-them'}">${escapeHtml(m.text)}</div>
+  `).join('') || '<p class="hint-text">まだメッセージがありません</p>';
+  list.scrollTop = list.scrollHeight;
+}
+
+function openChatPanel() {
+  if (!state.room || !state.room.guestId) return;
+  state.chatOpen = true;
+  $('chatPanel').hidden = false;
+  state.chatSeenCount = (state.room.chat || []).length;
+  $('chatBarBadge').hidden = true;
+  renderChatMessages(state.room);
+  $('chatInput').focus();
+}
+
+function closeChatPanel() {
+  state.chatOpen = false;
+  $('chatPanel').hidden = true;
 }
 
 // ------------------------------------------------------------------
@@ -587,6 +650,22 @@ async function init() {
   for (const btn of bottomTabbar.querySelectorAll('button')) {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   }
+  $('chatBar').addEventListener('click', openChatPanel);
+  $('chatCloseBtn').addEventListener('click', closeChatPanel);
+  $('chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.room) return;
+    const input = $('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const role = myRole(state.room);
+    try {
+      await sendChatMessage(state.room.code, role, text);
+    } catch (error) {
+      showToast('送信に失敗しました');
+    }
+  });
   const active = loadActiveRoom();
   if (active?.code) enterRoom(active.code);
   else render();
