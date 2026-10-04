@@ -1,4 +1,5 @@
 node_modules/
+package*.json
 data_raw/
 build_puzzles.js
 .DS_Store
