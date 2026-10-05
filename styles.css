@@ -66,11 +66,20 @@ textarea { font: inherit; }
 .end-request-banner.is-incoming { border-color: var(--warm); }
 .end-request-buttons { display: flex; gap: 8px; }
 
-/* 問題選択 */
-.tag-filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+/* 問題選択: タグが80種類超あるので、頻度順(=よく使うタグが先頭)で並べた上
+   で高さを数行ぶんに制限し、中だけでスクロールさせる(全部ワラワラ並んで
+   問題一覧を下に押し出してしまわないように)。 */
+.tag-filter-head { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 6px; }
+.tag-filter-head .field-label { margin: 0; }
+.tag-filter-clear { border: none; background: none; color: var(--accent); font-size: .76rem; font-weight: 800; padding: 2px 4px; }
+.tag-filter-row {
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px;
+  max-height: 104px; overflow-y: auto; padding: 2px 2px 2px 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface-2);
+}
 .tag-filter-chip {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px;
-  padding: 6px 12px; font-size: .78rem; font-weight: 700;
+  padding: 6px 12px; font-size: .78rem; font-weight: 700; flex: 0 0 auto;
 }
 .tag-filter-chip.is-active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .puzzle-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }

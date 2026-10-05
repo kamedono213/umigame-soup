@@ -149,11 +149,33 @@ async function handleJoinRoom() {
   }
 }
 
+// chat/lastEmoteだけが変わった更新ではrender()を呼ばない。render()は
+// #app.innerHTMLを丸ごと作り直すため、相手からのチャット/エモートが届く
+// たびに「質問を入力中」のtextareaなど未保存の入力値が消えてしまっていた。
+// チャット自体はupdateChatUi()が#app外のchat-dockだけを更新するので、
+// ゲーム進行に関係する項目が変わっていない限りrender()は不要。
+// JSON.stringifyはオブジェクトのキー出現順をそのまま使うため、Firestoreの
+// スナップショットがフィールド順を毎回同じ保証をしてくれない(同じデータでも
+// 呼ぶたびに違う文字列になりうる)。再帰的にキーをソートしてから文字列化する。
+function stableStringify(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+function roomSignature(room) {
+  const { chat, lastEmote, ...rest } = room;
+  return stableStringify(rest);
+}
+
 function enterRoom(code) {
   state.code = code;
   saveActiveRoom(code);
   state.lastSeenEmoteTs = 0; // 入室直後に古いエモートを再生しないよう、最初のスナップショットで現在値に合わせる
   let firstSnapshot = true;
+  let prevSignature = null;
   if (state.unsubscribe) state.unsubscribe();
   state.unsubscribe = subscribeToRoom(code, (room) => {
     if (!room) {
@@ -170,7 +192,9 @@ function enterRoom(code) {
       state.answerPanelOpen = false;
     }
     if (prevPhase !== room.phase && room.phase === 'playing') state.freeAnswerMode = false;
-    render();
+    const sig = roomSignature(room);
+    if (sig !== prevSignature) render();
+    prevSignature = sig;
     updateChatUi(room);
     if (firstSnapshot) {
       state.lastSeenEmoteTs = room.lastEmote?.ts || 0;
@@ -374,6 +398,10 @@ function renderSelectingPuzzle(room) {
     ${roundTopbarHtml(room)}
     <section class="puzzle-select">
       <h2>問題を選んでください</h2>
+      <div class="tag-filter-head">
+        <p class="field-label">タグで絞り込み(よく使う順)</p>
+        ${state.selectedTags.size ? `<button id="tagClearBtn" type="button" class="tag-filter-clear">クリア</button>` : ''}
+      </div>
       <div id="tagFilterRow" class="tag-filter-row"></div>
       <p class="hint-text">${list.length}問 / 全${PUZZLES.length}問</p>
       <div id="puzzleList" class="puzzle-list"></div>
@@ -393,6 +421,7 @@ function renderSelectingPuzzle(room) {
     });
     tagRow.appendChild(btn);
   }
+  $('tagClearBtn')?.addEventListener('click', () => { state.selectedTags.clear(); render(); });
 
   const listEl = $('puzzleList');
   for (const p of list) {
