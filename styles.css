@@ -157,10 +157,16 @@ textarea { font: inherit; }
 
 /* バトル中のチャット: 画面下1/3くらいに常時固定し、画面転換なしで打てる。
    その上に「微妙な空間」として待ち時間用のミニゲーム(貝殻拾いタップ)を置く。
-   スタック(下から): bottom-tabbar(68px) → chat-dock(--chat-h) → side-game(--sidegame-h)。 */
+   ミニゲームは部屋を作る前のホーム画面でも遊べるので、チャットの有無
+   (body.in-room、相手がいないと出ない)とは別にbody.side-game-activeで
+   管理する。スタック(下から): bottom-tabbar(68px) → [chat-dockがあれば]
+   → side-game(--sidegame-h)。 */
 :root { --chat-h: 32vh; --chat-h-min: 230px; --chat-h-max: 340px; --sidegame-h: 50px; }
 
-body.in-room {
+body.side-game-active {
+  padding-bottom: calc(68px + var(--sidegame-h) + env(safe-area-inset-bottom));
+}
+body.in-room.side-game-active {
   padding-bottom: calc(68px + var(--sidegame-h) + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + env(safe-area-inset-bottom));
 }
 body.in-room .action-area {
@@ -169,9 +175,12 @@ body.in-room .action-area {
 
 .side-game {
   position: fixed; left: 0; right: 0; z-index: 11; height: var(--sidegame-h);
-  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + env(safe-area-inset-bottom));
+  bottom: calc(68px + env(safe-area-inset-bottom));
   display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px;
   background: var(--surface-2); border-top: 1px dashed var(--line);
+}
+body.in-room .side-game {
+  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + env(safe-area-inset-bottom));
 }
 .side-game[hidden] { display: none; }
 .side-game-btn { border: none; background: none; font-size: 1.5rem; line-height: 1; padding: 4px 8px; transition: transform .1s; }
@@ -189,10 +198,13 @@ body.in-room .action-area {
    「もう少し遊べる」要素として、自動収集役(CpS)とタップ強化を売る。 */
 .side-game-shop {
   position: fixed; left: 0; right: 0; z-index: 13;
-  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + var(--sidegame-h) + env(safe-area-inset-bottom));
+  bottom: calc(68px + var(--sidegame-h) + env(safe-area-inset-bottom));
   max-height: 42vh; display: flex; flex-direction: column;
   background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
   box-shadow: 0 -4px 14px rgba(0,0,0,.1);
+}
+body.in-room .side-game-shop {
+  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + var(--sidegame-h) + env(safe-area-inset-bottom));
 }
 .side-game-shop[hidden] { display: none; }
 .side-game-shop-head {
@@ -255,8 +267,11 @@ body.in-room .action-area {
   font-size: 2.1rem; animation: emoteFloat 1.6s ease-out forwards;
 }
 .floating-pop {
-  position: absolute; bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + var(--sidegame-h) / 2);
+  position: absolute; bottom: calc(68px + var(--sidegame-h) / 2);
   font-size: .85rem; font-weight: 800; color: var(--accent); animation: popFloat 0.8s ease-out forwards;
+}
+body.in-room .floating-pop {
+  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + var(--sidegame-h) / 2);
 }
 @keyframes emoteFloat {
   0% { transform: translateY(0) scale(.5); opacity: 0; }
