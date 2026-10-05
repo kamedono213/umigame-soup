@@ -39,7 +39,10 @@ const state = {
   dataGames: [],
   savedEndedKey: null,
   lastSeenEmoteTs: 0, // ここまで再生済みのエモートのts(自分のエコー/入室前の古いエモートを再生しないためのガード)
-  clicker: { cookies: 0, clickPower: 1, owned: {}, upgrades: {} }, // 待ち時間ミニゲーム。端末ローカルのみ、対戦相手とは同期しない
+  // 待ち時間ミニゲーム。clickerはホーム画面用で端末に保存され継続する。
+  // roomClickerは部屋に入っている間だけ使う使い捨てで、保存されない。
+  clicker: { cookies: 0, clickPower: 1, owned: {}, upgrades: {} },
+  roomClicker: { cookies: 0, clickPower: 1, owned: {}, upgrades: {} },
 };
 
 function myRole(room) {
@@ -83,6 +86,19 @@ function render() {
   for (const btn of bottomTabbar.querySelectorAll('button')) {
     btn.classList.toggle('is-active', btn.dataset.tab === state.tab);
   }
+  updateSideGameVisibility();
+}
+
+// ミニゲームは部屋を作る前のホーム画面でも、部屋の中でも遊べる(ホーム=
+// 継続保存、部屋の中=使い捨て、の違いはactiveClicker()側で吸収する)。
+// チャットは相手がいないと意味がないので、こちらは従来通りupdateChatUi()
+// 側でroom.guestId確定後だけ表示する。
+function updateSideGameVisibility() {
+  const visible = state.tab === 'battle';
+  $('sideGame').hidden = !visible;
+  document.body.classList.toggle('side-game-active', visible);
+  if (!visible) $('sideGameShop').hidden = true;
+  if (visible) updateSideGameDisplay();
 }
 function switchTab(tab) { state.tab = tab; render(); }
 
@@ -173,6 +189,7 @@ function roomSignature(room) {
 function enterRoom(code) {
   state.code = code;
   saveActiveRoom(code);
+  state.roomClicker = freshClickerState(); // 部屋に入るたびミニゲームはゼロから(ホーム側の進行には影響しない)
   state.lastSeenEmoteTs = 0; // 入室直後に古いエモートを再生しないよう、最初のスナップショットで現在値に合わせる
   let firstSnapshot = true;
   let prevSignature = null;
@@ -224,7 +241,6 @@ function updateChatUi(room) {
   const inRoom = !!(room && room.guestId);
   document.body.classList.toggle('in-room', inRoom);
   $('chatDock').hidden = !inRoom;
-  $('sideGame').hidden = !inRoom;
   if (!inRoom) return;
   renderChatMessages(room);
 }
@@ -292,6 +308,15 @@ const CLICKER_UPGRADES = [
   { key: 'u2', name: '海の知識', icon: '📖', desc: 'タップ1回の獲得量がさらに増える', cost: 5000, power: 3 },
 ];
 
+// 部屋に入る前のホーム画面では、継続的に保存される永続クリッカー
+// (state.clicker)を使う。部屋を作った/入った瞬間から、別の使い捨て
+// クリッカー(state.roomClicker)に切り替わり、常にゼロから始まって
+// 保存もされない(対戦が終わって部屋を出てもホーム側には一切引き継がれない)。
+// activeClicker()はその時点で「今どちらを見せるべきか」を1箇所にまとめる。
+function freshClickerState() { return { cookies: 0, clickPower: 1, owned: {}, upgrades: {} }; }
+function activeClicker() { return state.room ? state.roomClicker : state.clicker; }
+function isClickerPersistent() { return !state.room; }
+
 function loadClickerState() {
   try {
     const raw = JSON.parse(localStorage.getItem(CLICKER_STORE_KEY) || 'null');
@@ -299,16 +324,18 @@ function loadClickerState() {
       return { cookies: raw.cookies || 0, clickPower: raw.clickPower || 1, owned: raw.owned || {}, upgrades: raw.upgrades || {} };
     }
   } catch (_) {}
-  return { cookies: 0, clickPower: 1, owned: {}, upgrades: {} };
+  return freshClickerState();
 }
 function saveClickerState() {
+  if (!isClickerPersistent()) return; // 部屋の中の使い捨てクリッカーは保存しない
   try { localStorage.setItem(CLICKER_STORE_KEY, JSON.stringify(state.clicker)); } catch (_) {}
 }
 function clickerCost(gen, owned) {
   return Math.round(gen.baseCost * Math.pow(1.15, owned));
 }
 function clickerTotalCps() {
-  return CLICKER_GENERATORS.reduce((sum, g) => sum + g.cps * (state.clicker.owned[g.key] || 0), 0);
+  const c = activeClicker();
+  return CLICKER_GENERATORS.reduce((sum, g) => sum + g.cps * (c.owned[g.key] || 0), 0);
 }
 function formatClickerNumber(v) {
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
@@ -317,14 +344,16 @@ function formatClickerNumber(v) {
 }
 
 function updateSideGameDisplay() {
-  $('sideGameCount').textContent = formatClickerNumber(state.clicker.cookies);
+  const c = activeClicker();
+  $('sideGameCount').textContent = formatClickerNumber(c.cookies);
   const cps = clickerTotalCps();
   $('sideGameCps').textContent = cps > 0 ? `+${cps >= 10 ? Math.round(cps) : cps.toFixed(1)}/秒` : '';
 }
 
 function handleSideGameTap() {
-  const gain = state.clicker.clickPower;
-  state.clicker.cookies += gain;
+  const c = activeClicker();
+  const gain = c.clickPower;
+  c.cookies += gain;
   updateSideGameDisplay();
   saveClickerState();
   spawnFloatingPop('+' + gain);
@@ -341,7 +370,7 @@ function startClickerLoop() {
     last = now;
     const cps = clickerTotalCps();
     if (cps <= 0) return;
-    state.clicker.cookies += cps * dt;
+    activeClicker().cookies += cps * dt;
     if (!$('sideGame').hidden) updateSideGameDisplay();
     if (!$('sideGameShop').hidden) renderSideGameShop();
     saveClickerState();
@@ -349,12 +378,13 @@ function startClickerLoop() {
 }
 
 function renderSideGameShop() {
+  const c = activeClicker();
   const list = $('sideGameShopList');
   const parts = [];
   for (const g of CLICKER_GENERATORS) {
-    const owned = state.clicker.owned[g.key] || 0;
+    const owned = c.owned[g.key] || 0;
     const cost = clickerCost(g, owned);
-    const afford = state.clicker.cookies >= cost;
+    const afford = c.cookies >= cost;
     parts.push(`
       <div class="shop-item${afford ? ' is-affordable' : ''}">
         <span class="shop-item-icon">${g.icon}</span>
@@ -366,8 +396,8 @@ function renderSideGameShop() {
       </div>`);
   }
   for (const u of CLICKER_UPGRADES) {
-    const owned = !!state.clicker.upgrades[u.key];
-    const afford = state.clicker.cookies >= u.cost;
+    const owned = !!c.upgrades[u.key];
+    const afford = c.cookies >= u.cost;
     parts.push(`
       <div class="shop-item${owned ? ' is-maxed' : afford ? ' is-affordable' : ''}">
         <span class="shop-item-icon">${u.icon}</span>
@@ -384,22 +414,24 @@ function renderSideGameShop() {
 }
 
 function buyGenerator(key) {
+  const c = activeClicker();
   const g = CLICKER_GENERATORS.find((x) => x.key === key);
-  const owned = state.clicker.owned[key] || 0;
+  const owned = c.owned[key] || 0;
   const cost = clickerCost(g, owned);
-  if (state.clicker.cookies < cost) return;
-  state.clicker.cookies -= cost;
-  state.clicker.owned[key] = owned + 1;
+  if (c.cookies < cost) return;
+  c.cookies -= cost;
+  c.owned[key] = owned + 1;
   saveClickerState();
   updateSideGameDisplay();
   renderSideGameShop();
 }
 function buyClickerUpgrade(key) {
+  const c = activeClicker();
   const u = CLICKER_UPGRADES.find((x) => x.key === key);
-  if (state.clicker.upgrades[key] || state.clicker.cookies < u.cost) return;
-  state.clicker.cookies -= u.cost;
-  state.clicker.upgrades[key] = true;
-  state.clicker.clickPower += u.power;
+  if (c.upgrades[key] || c.cookies < u.cost) return;
+  c.cookies -= u.cost;
+  c.upgrades[key] = true;
+  c.clickPower += u.power;
   saveClickerState();
   updateSideGameDisplay();
   renderSideGameShop();
@@ -844,7 +876,7 @@ async function init() {
     btn.addEventListener('click', () => handleSendEmote(EMOTE_OPTIONS[i]));
   });
   state.clicker = loadClickerState();
-  updateSideGameDisplay();
+  updateSideGameVisibility();
   startClickerLoop();
   $('sideGameBtn').addEventListener('click', handleSideGameTap);
   $('sideGameShopBtn').addEventListener('click', openSideGameShop);
