@@ -57,6 +57,7 @@ function freshRoundFields() {
     result: null,
     endRequest: null,
     chat: [],
+    lastEmote: null,
     startedAt: serverTimestamp(),
     endedAt: null,
   };
@@ -67,6 +68,15 @@ function freshRoundFields() {
 export async function sendChatMessage(code, from, text) {
   await updateDoc(doc(dbFs, ROOMS, code), {
     chat: arrayUnion({ from, text, ts: Date.now() }),
+  });
+}
+
+// 画面上にふわっと出て消えるエモート。蓄積はせず最新の1件だけを持たせ、
+// tsが変わるたびに両端末がそれぞれアニメーションを再生する(OrbitalDuelの
+// shotSeqと同じ、1フィールド上書き式のトランジェント通知パターン)。
+export async function sendEmote(code, from, emoji) {
+  await updateDoc(doc(dbFs, ROOMS, code), {
+    lastEmote: { from, emoji, ts: Date.now() },
   });
 }
 

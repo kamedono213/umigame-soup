@@ -19,15 +19,17 @@
     <button type="button" data-tab="battle"><span data-no-reading="true">🐢</span><span>バトル</span></button>
     <button type="button" data-tab="data"><span data-no-reading="true">📊</span><span>データ</span></button>
   </nav>
-  <button id="chatBar" type="button" class="chat-bar" hidden>
-    <span class="chat-bar-icon" data-no-reading="true">💬</span>
-    <span id="chatBarPreview" class="chat-bar-preview">チャット</span>
-    <span id="chatBarBadge" class="chat-bar-badge" hidden>0</span>
-  </button>
-  <div id="chatPanel" class="chat-panel" hidden>
-    <div class="chat-panel-head">
+  <div id="emoteLayer" class="emote-layer" aria-hidden="true"></div>
+  <div id="sideGame" class="side-game" hidden>
+    <button id="sideGameBtn" type="button" class="side-game-btn" title="待ち時間に遊べる貝殻拾い">
+      <span data-no-reading="true">🐚</span>
+    </button>
+    <span id="sideGameCount" class="side-game-count">0</span>
+  </div>
+  <div id="chatDock" class="chat-dock" hidden>
+    <div class="chat-dock-head">
       <span>チャット</span>
-      <button id="chatCloseBtn" type="button" class="chat-close-btn">✕</button>
+      <div id="emotePicker" class="emote-picker"></div>
     </div>
     <div id="chatMessages" class="chat-messages"></div>
     <form id="chatForm" class="chat-form">
