@@ -24,7 +24,18 @@
     <button id="sideGameBtn" type="button" class="side-game-btn" title="待ち時間に遊べる貝殻拾い">
       <span data-no-reading="true">🐚</span>
     </button>
-    <span id="sideGameCount" class="side-game-count">0</span>
+    <div class="side-game-info">
+      <span id="sideGameCount" class="side-game-count">0</span>
+      <span id="sideGameCps" class="side-game-cps"></span>
+    </div>
+    <button id="sideGameShopBtn" type="button" class="side-game-shop-btn">🛒 店</button>
+  </div>
+  <div id="sideGameShop" class="side-game-shop" hidden>
+    <div class="side-game-shop-head">
+      <span>貝殻の店</span>
+      <button id="sideGameShopClose" type="button" class="side-game-shop-close">✕</button>
+    </div>
+    <div id="sideGameShopList" class="side-game-shop-list"></div>
   </div>
   <div id="chatDock" class="chat-dock" hidden>
     <div class="chat-dock-head">

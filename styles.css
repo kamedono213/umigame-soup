@@ -170,13 +170,53 @@ body.in-room .action-area {
 .side-game {
   position: fixed; left: 0; right: 0; z-index: 11; height: var(--sidegame-h);
   bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + env(safe-area-inset-bottom));
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px;
   background: var(--surface-2); border-top: 1px dashed var(--line);
 }
 .side-game[hidden] { display: none; }
 .side-game-btn { border: none; background: none; font-size: 1.5rem; line-height: 1; padding: 4px 8px; transition: transform .1s; }
 .side-game-btn:active { transform: scale(1.25); }
+.side-game-info { display: flex; flex-direction: column; align-items: center; line-height: 1.15; min-width: 44px; }
 .side-game-count { font-weight: 800; font-size: .85rem; color: var(--muted); }
+.side-game-cps { font-size: .6rem; color: var(--accent); font-weight: 700; min-height: 1em; }
+.side-game-shop-btn {
+  margin-left: auto; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font-weight: 800; font-size: .74rem; padding: 6px 12px; border-radius: 999px;
+}
+.side-game-shop-btn:active { transform: scale(.96); }
+
+/* ショップはsite-gameのすぐ上に、画面遷移なしで展開する小さなパネル。
+   「もう少し遊べる」要素として、自動収集役(CpS)とタップ強化を売る。 */
+.side-game-shop {
+  position: fixed; left: 0; right: 0; z-index: 13;
+  bottom: calc(68px + clamp(var(--chat-h-min), var(--chat-h), var(--chat-h-max)) + var(--sidegame-h) + env(safe-area-inset-bottom));
+  max-height: 42vh; display: flex; flex-direction: column;
+  background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  box-shadow: 0 -4px 14px rgba(0,0,0,.1);
+}
+.side-game-shop[hidden] { display: none; }
+.side-game-shop-head {
+  flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; border-bottom: 1px solid var(--line); font-weight: 800; font-size: .84rem;
+}
+.side-game-shop-close { border: none; background: none; font-size: 1rem; color: var(--muted); padding: 4px 8px; }
+.side-game-shop-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; }
+.shop-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+}
+.shop-item.is-affordable { border-color: var(--accent); }
+.shop-item.is-maxed { opacity: .55; }
+.shop-item-icon { font-size: 1.3rem; flex: 0 0 auto; }
+.shop-item-body { flex: 1; min-width: 0; }
+.shop-item-name { font-weight: 800; font-size: .82rem; }
+.shop-item-owned { font-weight: 700; color: var(--accent); font-size: .74rem; }
+.shop-item-desc { font-size: .68rem; color: var(--muted); }
+.shop-item-buy {
+  flex: 0 0 auto; border: none; border-radius: 999px; padding: 7px 13px; font-weight: 800; font-size: .76rem;
+  background: var(--accent); color: #fff; min-width: 54px;
+}
+.shop-item-buy:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
 
 .chat-dock {
   position: fixed; left: 0; right: 0; bottom: calc(68px + env(safe-area-inset-bottom)); z-index: 12;
