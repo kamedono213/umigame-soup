@@ -2,7 +2,7 @@ import {
   createRoom, joinRoom, subscribeToRoom, selectPuzzle,
   submitPending, answerQuestion, judgeGuess,
   requestEndGame, cancelEndRequest, approveEndGame, startNextRound,
-  sendChatMessage,
+  sendChatMessage, sendEmote,
   getClientId,
 } from './room.js';
 import { listGames, putGame, deleteGame } from './db.js';
@@ -17,6 +17,8 @@ const ANSWER_CLASS = {
   'はい': 'ans-yes', 'いいえ': 'ans-no', 'どちらでもない': 'ans-maybe',
   '部分的にはい': 'ans-partial-yes', '部分的にいいえ': 'ans-partial-no',
 };
+const EMOTE_OPTIONS = ['😂', '😮', '👍', '😢', '🔥', '❤️'];
+const CLICKER_STORE_KEY = 'umigame-soup:clickerCount';
 
 const PUZZLE_BY_ID = new Map(PUZZLES.map((p) => [p.id, p]));
 const ALL_TAGS = (() => {
@@ -36,8 +38,8 @@ const state = {
   freeAnswerMode: false, // 質問への自由回答入力欄を開いているか
   dataGames: [],
   savedEndedKey: null,
-  chatOpen: false,
-  chatSeenCount: 0, // パネルを開いて既読にした時点でのチャット件数(未読バッジ算出用)
+  lastSeenEmoteTs: 0, // ここまで再生済みのエモートのts(自分のエコー/入室前の古いエモートを再生しないためのガード)
+  clickerCount: 0, // 待ち時間ミニゲーム(貝殻拾いタップ)。端末ローカルのみ、対戦相手とは同期しない
 };
 
 function myRole(room) {
@@ -150,6 +152,8 @@ async function handleJoinRoom() {
 function enterRoom(code) {
   state.code = code;
   saveActiveRoom(code);
+  state.lastSeenEmoteTs = 0; // 入室直後に古いエモートを再生しないよう、最初のスナップショットで現在値に合わせる
+  let firstSnapshot = true;
   if (state.unsubscribe) state.unsubscribe();
   state.unsubscribe = subscribeToRoom(code, (room) => {
     if (!room) {
@@ -168,6 +172,12 @@ function enterRoom(code) {
     if (prevPhase !== room.phase && room.phase === 'playing') state.freeAnswerMode = false;
     render();
     updateChatUi(room);
+    if (firstSnapshot) {
+      state.lastSeenEmoteTs = room.lastEmote?.ts || 0;
+      firstSnapshot = false;
+    } else {
+      maybePlayIncomingEmote(room);
+    }
   });
   render();
 }
@@ -179,65 +189,93 @@ function leaveRoom() {
   state.room = null;
   clearActiveRoom();
   render();
-  closeChatPanel();
-  state.chatSeenCount = 0;
   updateChatUi(null);
 }
 
 // ------------------------------------------------------------------
-// バトル中のチャット(画面下のバーを押すと全画面パネルが開く)。
-// 相手がいる部屋(guestId確定後)でだけ使える。質問ログとは別枠の自由会話。
+// バトル中のチャット: 画面下1/3くらいに常時固定し、画面転換なしで打てる。
+// 相手がいる部屋(guestId確定後)でだけ表示。質問ログとは別枠の自由会話。
 // ------------------------------------------------------------------
-function chatBarEl() { return $('chatBar'); }
-
 function updateChatUi(room) {
   const inRoom = !!(room && room.guestId);
   document.body.classList.toggle('in-room', inRoom);
-  const bar = chatBarEl();
-  bar.hidden = !inRoom;
-  if (!inRoom) {
-    closeChatPanel();
-    return;
-  }
-  const chat = room.chat || [];
-  const last = chat[chat.length - 1];
-  $('chatBarPreview').textContent = last
-    ? `${last.from === myRole(room) ? 'あなた' : '相手'}: ${last.text}`
-    : 'チャット';
-  const badge = $('chatBarBadge');
-  if (state.chatOpen) {
-    state.chatSeenCount = chat.length;
-    badge.hidden = true;
-    renderChatMessages(room);
-  } else {
-    const unread = chat.length - state.chatSeenCount;
-    badge.hidden = unread <= 0;
-    if (unread > 0) badge.textContent = String(unread);
-  }
+  $('chatDock').hidden = !inRoom;
+  $('sideGame').hidden = !inRoom;
+  if (!inRoom) return;
+  renderChatMessages(room);
 }
 
 function renderChatMessages(room) {
   const role = myRole(room);
   const list = $('chatMessages');
+  const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
   list.innerHTML = (room.chat || []).map((m) => `
     <div class="chat-msg ${m.from === role ? 'is-me' : 'is-them'}">${escapeHtml(m.text)}</div>
   `).join('') || '<p class="hint-text">まだメッセージがありません</p>';
-  list.scrollTop = list.scrollHeight;
+  if (wasNearBottom) list.scrollTop = list.scrollHeight;
 }
 
-function openChatPanel() {
-  if (!state.room || !state.room.guestId) return;
-  state.chatOpen = true;
-  $('chatPanel').hidden = false;
-  state.chatSeenCount = (state.room.chat || []).length;
-  $('chatBarBadge').hidden = true;
-  renderChatMessages(state.room);
-  $('chatInput').focus();
+// ------------------------------------------------------------------
+// エモート: 画面上にふわっと出て消える絵文字リアクション。相手にも見える。
+// Firestoreには最新の1件(lastEmote)だけを持たせ、tsが変わるたびに
+// その場に居合わせた両端末が再生する(蓄積しないトランジェント通知)。
+// ------------------------------------------------------------------
+function maybePlayIncomingEmote(room) {
+  const emote = room.lastEmote;
+  if (!emote || !emote.ts || emote.ts <= state.lastSeenEmoteTs) return;
+  state.lastSeenEmoteTs = emote.ts;
+  spawnFloatingEmote(emote.emoji);
 }
 
-function closeChatPanel() {
-  state.chatOpen = false;
-  $('chatPanel').hidden = true;
+async function handleSendEmote(emoji) {
+  if (!state.room) return;
+  const role = myRole(state.room);
+  const ts = Date.now();
+  state.lastSeenEmoteTs = ts; // 自分の書き込みが戻ってきた時の二重再生を防ぐ
+  spawnFloatingEmote(emoji); // 相手の応答を待たず、自分の画面にはすぐ出す
+  try {
+    await sendEmote(state.room.code, role, emoji);
+  } catch (error) {
+    showToast('送信に失敗しました');
+  }
+}
+
+function spawnFloatingEmote(emoji) {
+  const layer = $('emoteLayer');
+  const el = document.createElement('span');
+  el.className = 'floating-emote';
+  el.textContent = emoji;
+  el.style.left = `${12 + Math.random() * 70}%`;
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1700);
+}
+
+// ------------------------------------------------------------------
+// 待ち時間の暇つぶしミニゲーム(貝殻拾いタップ)。チャット欄の上、質問回答欄の
+// 下の空間に常駐。対戦には一切影響しない、端末ローカルだけのおまけ。
+// ------------------------------------------------------------------
+function loadClickerCount() {
+  try { return Number(localStorage.getItem(CLICKER_STORE_KEY)) || 0; } catch (_) { return 0; }
+}
+function saveClickerCount(n) {
+  try { localStorage.setItem(CLICKER_STORE_KEY, String(n)); } catch (_) {}
+}
+
+function handleSideGameTap() {
+  state.clickerCount++;
+  $('sideGameCount').textContent = String(state.clickerCount);
+  saveClickerCount(state.clickerCount);
+  spawnFloatingPop('+1');
+}
+
+function spawnFloatingPop(text) {
+  const layer = $('emoteLayer');
+  const el = document.createElement('span');
+  el.className = 'floating-pop';
+  el.textContent = text;
+  el.style.left = '50%';
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 900);
 }
 
 // ------------------------------------------------------------------
@@ -650,8 +688,14 @@ async function init() {
   for (const btn of bottomTabbar.querySelectorAll('button')) {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   }
-  $('chatBar').addEventListener('click', openChatPanel);
-  $('chatCloseBtn').addEventListener('click', closeChatPanel);
+  const emotePicker = $('emotePicker');
+  emotePicker.innerHTML = EMOTE_OPTIONS.map((e) => `<button type="button" class="emote-btn">${e}</button>`).join('');
+  emotePicker.querySelectorAll('.emote-btn').forEach((btn, i) => {
+    btn.addEventListener('click', () => handleSendEmote(EMOTE_OPTIONS[i]));
+  });
+  state.clickerCount = loadClickerCount();
+  $('sideGameCount').textContent = String(state.clickerCount);
+  $('sideGameBtn').addEventListener('click', handleSideGameTap);
   $('chatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.room) return;
