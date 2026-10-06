@@ -349,10 +349,35 @@ const CLICKER_GENERATORS = [
   { key: 'g2', name: 'カニの助手', icon: '🦀', desc: '砂浜を歩き回って貝殻を拾う', baseCost: 100, cps: 1 },
   { key: 'g3', name: '小さな漁船', icon: '⛵', desc: '沖まで出て貝殻を集めてくる', baseCost: 1100, cps: 8 },
   { key: 'g4', name: '貝の島', icon: '🏝️', desc: '島ごと貝殻であふれる秘密の島', baseCost: 12000, cps: 47 },
+  { key: 'g5', name: '海底探査艇', icon: '🤿', desc: '深い海底まで潜って貝殻を集める', baseCost: 130000, cps: 260 },
+  { key: 'g6', name: '漁師村', icon: '🏘️', desc: '村中の漁師が貝殻集めに協力してくれる', baseCost: 1400000, cps: 1400 },
+  { key: 'g7', name: '貿易船団', icon: '🚢', desc: '各地から貝殻を運んでくる船団', baseCost: 20000000, cps: 7800 },
+  { key: 'g8', name: '深海調査船', icon: '🌊', desc: '誰も知らない深海から貝殻を引き上げる', baseCost: 330000000, cps: 44000 },
 ];
 const CLICKER_UPGRADES = [
   { key: 'u1', name: 'するどい目', icon: '👀', desc: 'タップ1回の獲得量が増える', cost: 500, power: 1 },
   { key: 'u2', name: '海の知識', icon: '📖', desc: 'タップ1回の獲得量がさらに増える', cost: 5000, power: 3 },
+  { key: 'u3', name: '潮の勘', icon: '🌙', desc: 'タップ1回の獲得量がぐっと増える', cost: 50000, power: 8 },
+  { key: 'u4', name: 'ベテラン漁師の技', icon: '🎣', desc: 'タップ1回の獲得量が大きく増える', cost: 600000, power: 20 },
+  { key: 'u5', name: '伝説の海図', icon: '🗺️', desc: 'タップ1回の獲得量が大幅に増える', cost: 7000000, power: 50 },
+  { key: 'u6', name: '深海の加護', icon: '🔱', desc: 'タップ1回の獲得量が桁違いに増える', cost: 90000000, power: 130 },
+];
+// 施設ごとの生産効率を2倍にする、1回だけ買えるブースト。施設を育てるほど
+// 「強化」ページでも買うものが増えていくようにするための3つ目のカテゴリ。
+const CLICKER_BOOSTS = [
+  { key: 'b1', name: 'しんじゅがいの養殖', icon: '📈', desc: 'しんじゅがいの生産効率が2倍になる', cost: 300, genKey: 'g1' },
+  { key: 'b2', name: 'カニの訓練', icon: '📈', desc: 'カニの助手の生産効率が2倍になる', cost: 2000, genKey: 'g2' },
+  { key: 'b3', name: '漁船の改良', icon: '📈', desc: '小さな漁船の生産効率が2倍になる', cost: 22000, genKey: 'g3' },
+  { key: 'b4', name: '島の開発', icon: '📈', desc: '貝の島の生産効率が2倍になる', cost: 240000, genKey: 'g4' },
+  { key: 'b5', name: '探査艇の強化', icon: '📈', desc: '海底探査艇の生産効率が2倍になる', cost: 2600000, genKey: 'g5' },
+  { key: 'b6', name: '漁師村の増築', icon: '📈', desc: '漁師村の生産効率が2倍になる', cost: 28000000, genKey: 'g6' },
+  { key: 'b7', name: '船団の増強', icon: '📈', desc: '貿易船団の生産効率が2倍になる', cost: 400000000, genKey: 'g7' },
+  { key: 'b8', name: '深海との同調', icon: '📈', desc: '深海調査船の生産効率が2倍になる', cost: 6600000000, genKey: 'g8' },
+];
+const CLICKER_SHOP_PAGES = [
+  { key: 'gen', label: '施設' },
+  { key: 'tap', label: 'タップ強化' },
+  { key: 'boost', label: '生産強化' },
 ];
 
 // 部屋に入る前のホーム画面では、継続的に保存される永続クリッカー
@@ -360,7 +385,7 @@ const CLICKER_UPGRADES = [
 // クリッカー(state.roomClicker)に切り替わり、常にゼロから始まって
 // 保存もされない(対戦が終わって部屋を出てもホーム側には一切引き継がれない)。
 // activeClicker()はその時点で「今どちらを見せるべきか」を1箇所にまとめる。
-function freshClickerState() { return { cookies: 0, clickPower: 1, owned: {}, upgrades: {} }; }
+function freshClickerState() { return { cookies: 0, clickPower: 1, owned: {}, upgrades: {}, boosts: {}, shopPage: 'gen' }; }
 function activeClicker() { return state.room ? state.roomClicker : state.clicker; }
 function isClickerPersistent() { return !state.room; }
 
@@ -368,7 +393,10 @@ function loadClickerState() {
   try {
     const raw = JSON.parse(localStorage.getItem(CLICKER_STORE_KEY) || 'null');
     if (raw && typeof raw === 'object') {
-      return { cookies: raw.cookies || 0, clickPower: raw.clickPower || 1, owned: raw.owned || {}, upgrades: raw.upgrades || {} };
+      return {
+        cookies: raw.cookies || 0, clickPower: raw.clickPower || 1, owned: raw.owned || {},
+        upgrades: raw.upgrades || {}, boosts: raw.boosts || {}, shopPage: 'gen',
+      };
     }
   } catch (_) {}
   return freshClickerState();
@@ -382,7 +410,11 @@ function clickerCost(gen, owned) {
 }
 function clickerTotalCps() {
   const c = activeClicker();
-  return CLICKER_GENERATORS.reduce((sum, g) => sum + g.cps * (c.owned[g.key] || 0), 0);
+  return CLICKER_GENERATORS.reduce((sum, g) => {
+    const boost = CLICKER_BOOSTS.find((b) => b.genKey === g.key);
+    const mult = boost && c.boosts[boost.key] ? 2 : 1;
+    return sum + g.cps * (c.owned[g.key] || 0) * mult;
+  }, 0);
 }
 function formatClickerNumber(v) {
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
@@ -425,40 +457,72 @@ function startClickerLoop() {
   }, 500);
 }
 
+function switchClickerShopPage(pageKey) {
+  activeClicker().shopPage = pageKey;
+  renderSideGameShop();
+}
+
 function renderSideGameShop() {
   const c = activeClicker();
+  if (!c.shopPage) c.shopPage = 'gen';
+  const tabs = $('sideGameShopTabs');
+  tabs.innerHTML = CLICKER_SHOP_PAGES.map((p) => `
+    <button type="button" class="shop-page-tab${p.key === c.shopPage ? ' is-active' : ''}" data-page="${p.key}">${p.label}</button>
+  `).join('');
+  tabs.querySelectorAll('[data-page]').forEach((btn) => btn.addEventListener('click', () => switchClickerShopPage(btn.dataset.page)));
+
   const list = $('sideGameShopList');
   const parts = [];
-  for (const g of CLICKER_GENERATORS) {
-    const owned = c.owned[g.key] || 0;
-    const cost = clickerCost(g, owned);
-    const afford = c.cookies >= cost;
-    parts.push(`
-      <div class="shop-item${afford ? ' is-affordable' : ''}">
-        <span class="shop-item-icon">${g.icon}</span>
-        <div class="shop-item-body">
-          <div class="shop-item-name">${escapeHtml(g.name)} <span class="shop-item-owned">×${owned}</span></div>
-          <div class="shop-item-desc">${escapeHtml(g.desc)}(${g.cps}/秒)</div>
-        </div>
-        <button type="button" class="shop-item-buy" data-gen="${g.key}"${afford ? '' : ' disabled'}>${formatClickerNumber(cost)}</button>
-      </div>`);
+  if (c.shopPage === 'gen') {
+    for (const g of CLICKER_GENERATORS) {
+      const owned = c.owned[g.key] || 0;
+      const cost = clickerCost(g, owned);
+      const afford = c.cookies >= cost;
+      const boost = CLICKER_BOOSTS.find((b) => b.genKey === g.key);
+      const boosted = boost && c.boosts[boost.key];
+      parts.push(`
+        <div class="shop-item${afford ? ' is-affordable' : ''}">
+          <span class="shop-item-icon">${g.icon}</span>
+          <div class="shop-item-body">
+            <div class="shop-item-name">${escapeHtml(g.name)} <span class="shop-item-owned">×${owned}</span>${boosted ? ' <span class="shop-item-boosted">⚡×2</span>' : ''}</div>
+            <div class="shop-item-desc">${escapeHtml(g.desc)}(${g.cps}/秒)</div>
+          </div>
+          <button type="button" class="shop-item-buy" data-gen="${g.key}"${afford ? '' : ' disabled'}>${formatClickerNumber(cost)}</button>
+        </div>`);
+    }
+  } else if (c.shopPage === 'tap') {
+    for (const u of CLICKER_UPGRADES) {
+      const owned = !!c.upgrades[u.key];
+      const afford = c.cookies >= u.cost;
+      parts.push(`
+        <div class="shop-item${owned ? ' is-maxed' : afford ? ' is-affordable' : ''}">
+          <span class="shop-item-icon">${u.icon}</span>
+          <div class="shop-item-body">
+            <div class="shop-item-name">${escapeHtml(u.name)}</div>
+            <div class="shop-item-desc">${escapeHtml(u.desc)}(タップ+${u.power})</div>
+          </div>
+          <button type="button" class="shop-item-buy" data-upg="${u.key}"${owned || !afford ? ' disabled' : ''}>${owned ? '購入済' : formatClickerNumber(u.cost)}</button>
+        </div>`);
+    }
+  } else {
+    for (const b of CLICKER_BOOSTS) {
+      const owned = !!c.boosts[b.key];
+      const afford = c.cookies >= b.cost;
+      parts.push(`
+        <div class="shop-item${owned ? ' is-maxed' : afford ? ' is-affordable' : ''}">
+          <span class="shop-item-icon">${b.icon}</span>
+          <div class="shop-item-body">
+            <div class="shop-item-name">${escapeHtml(b.name)}</div>
+            <div class="shop-item-desc">${escapeHtml(b.desc)}</div>
+          </div>
+          <button type="button" class="shop-item-buy" data-boost="${b.key}"${owned || !afford ? ' disabled' : ''}>${owned ? '購入済' : formatClickerNumber(b.cost)}</button>
+        </div>`);
+    }
   }
-  for (const u of CLICKER_UPGRADES) {
-    const owned = !!c.upgrades[u.key];
-    const afford = c.cookies >= u.cost;
-    parts.push(`
-      <div class="shop-item${owned ? ' is-maxed' : afford ? ' is-affordable' : ''}">
-        <span class="shop-item-icon">${u.icon}</span>
-        <div class="shop-item-body">
-          <div class="shop-item-name">${escapeHtml(u.name)}</div>
-          <div class="shop-item-desc">${escapeHtml(u.desc)}(タップ+${u.power})</div>
-        </div>
-        <button type="button" class="shop-item-buy" data-upg="${u.key}"${owned || !afford ? ' disabled' : ''}>${owned ? '購入済' : formatClickerNumber(u.cost)}</button>
-      </div>`);
-  }
-  list.innerHTML = parts.join('');
+  list.innerHTML = parts.join('') || '<p class="hint-text">このページにはまだ何もありません</p>';
   list.querySelectorAll('[data-gen]').forEach((btn) => btn.addEventListener('click', () => buyGenerator(btn.dataset.gen)));
   list.querySelectorAll('[data-upg]').forEach((btn) => btn.addEventListener('click', () => buyClickerUpgrade(btn.dataset.upg)));
+  list.querySelectorAll('[data-boost]').forEach((btn) => btn.addEventListener('click', () => buyClickerBoost(btn.dataset.boost)));
 }
 
 function buyGenerator(key) {
@@ -484,6 +548,17 @@ function buyClickerUpgrade(key) {
   saveClickerState();
   updateSideGameDisplay();
   sfx.purchase();
+  renderSideGameShop();
+}
+function buyClickerBoost(key) {
+  const c = activeClicker();
+  const b = CLICKER_BOOSTS.find((x) => x.key === key);
+  if (c.boosts[key] || c.cookies < b.cost) return;
+  c.cookies -= b.cost;
+  c.boosts[key] = true;
+  saveClickerState();
+  sfx.purchase();
+  updateSideGameDisplay();
   renderSideGameShop();
 }
 
