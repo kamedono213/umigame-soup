@@ -20,6 +20,43 @@ const ANSWER_CLASS = {
 const EMOTE_OPTIONS = ['😂', '😮', '👍', '😢', '🔥', '❤️'];
 const CLICKER_STORE_KEY = 'umigame-soup:clickerState';
 
+// ------------------------------------------------------------------
+// 効果音(Web Audioでその場合成、音声ファイルなし)。要所だけに絞って
+// 鳴らす: 部屋の作成/参加、質問送信、回答、正誤判定、対戦終了、
+// チャット受信、エモート、ミニゲームのタップ/購入。
+// ------------------------------------------------------------------
+let actx;
+function tone(freq, dur, opts = {}) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = actx.currentTime + (opts.delay || 0);
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = opts.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (opts.slideTo) osc.frequency.linearRampToValueAtTime(opts.slideTo, t0 + dur);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(opts.vol || 0.16, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(gain); gain.connect(actx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  } catch (_) {}
+}
+const sfx = {
+  tap: () => tone(480, 0.06, { type: 'sine', vol: 0.1 }),
+  room: () => { tone(520, 0.1, { type: 'triangle' }); tone(780, 0.14, { type: 'triangle', delay: 0.08, vol: 0.12 }); },
+  send: () => tone(640, 0.08, { type: 'sine', slideTo: 880, vol: 0.12 }),
+  answer: () => tone(420, 0.09, { type: 'triangle', vol: 0.13 }),
+  correct: () => { tone(560, 0.12, { type: 'triangle' }); tone(840, 0.18, { type: 'triangle', delay: 0.08, vol: 0.14 }); },
+  incorrect: () => tone(220, 0.22, { type: 'sine', slideTo: 130, vol: 0.14 }),
+  win: () => { tone(523, 0.16, { type: 'sine' }); tone(659, 0.16, { type: 'sine', delay: 0.14 }); tone(784, 0.26, { type: 'sine', delay: 0.28, vol: 0.14 }); },
+  lose: () => tone(300, 0.5, { type: 'sine', slideTo: 110, vol: 0.14 }),
+  chat: () => tone(700, 0.07, { type: 'sine', slideTo: 900, vol: 0.1 }),
+  emote: () => { tone(900, 0.07, { type: 'triangle', vol: 0.12 }); tone(1200, 0.08, { type: 'triangle', delay: 0.05, vol: 0.09 }); },
+  clickerTap: () => tone(1000, 0.045, { type: 'sine', vol: 0.07 }),
+  purchase: () => { tone(660, 0.08, { type: 'triangle', vol: 0.13 }); tone(990, 0.12, { type: 'triangle', delay: 0.06, vol: 0.11 }); },
+};
+
 const PUZZLE_BY_ID = new Map(PUZZLES.map((p) => [p.id, p]));
 const ALL_TAGS = (() => {
   const freq = new Map();
@@ -39,6 +76,7 @@ const state = {
   dataGames: [],
   savedEndedKey: null,
   lastSeenEmoteTs: 0, // ここまで再生済みのエモートのts(自分のエコー/入室前の古いエモートを再生しないためのガード)
+  lastChatCount: 0, // チャット受信音を「新着かつ相手から」の時だけ鳴らすためのカウンタ
   // 待ち時間ミニゲーム。clickerはホーム画面用で端末に保存され継続する。
   // roomClickerは部屋に入っている間だけ使う使い捨てで、保存されない。
   clicker: { cookies: 0, clickPower: 1, owned: {}, upgrades: {} },
@@ -142,6 +180,7 @@ async function handleCreateRoom() {
   btn.disabled = true;
   try {
     const { code } = await createRoom();
+    sfx.room();
     enterRoom(code);
   } catch (error) {
     showToast(error.message || '部屋の作成に失敗しました');
@@ -157,6 +196,7 @@ async function handleJoinRoom() {
   btn.disabled = true;
   try {
     await joinRoom(raw);
+    sfx.room();
     enterRoom(raw);
   } catch (error) {
     showToast(error.message || '参加に失敗しました');
@@ -191,6 +231,7 @@ function enterRoom(code) {
   saveActiveRoom(code);
   state.roomClicker = freshClickerState(); // 部屋に入るたびミニゲームはゼロから(ホーム側の進行には影響しない)
   state.lastSeenEmoteTs = 0; // 入室直後に古いエモートを再生しないよう、最初のスナップショットで現在値に合わせる
+  state.lastChatCount = 0;
   let firstSnapshot = true;
   let prevSignature = null;
   if (state.unsubscribe) state.unsubscribe();
@@ -247,9 +288,13 @@ function updateChatUi(room) {
 
 function renderChatMessages(room) {
   const role = myRole(room);
+  const chat = room.chat || [];
+  const last = chat[chat.length - 1];
+  if (chat.length > state.lastChatCount && last && last.from !== role) sfx.chat();
+  state.lastChatCount = chat.length;
   const list = $('chatMessages');
   const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
-  list.innerHTML = (room.chat || []).map((m) => `
+  list.innerHTML = chat.map((m) => `
     <div class="chat-msg ${m.from === role ? 'is-me' : 'is-them'}">${escapeHtml(m.text)}</div>
   `).join('') || '<p class="hint-text">まだメッセージがありません</p>';
   if (wasNearBottom) list.scrollTop = list.scrollHeight;
@@ -265,6 +310,7 @@ function maybePlayIncomingEmote(room) {
   if (!emote || !emote.ts || emote.ts <= state.lastSeenEmoteTs) return;
   state.lastSeenEmoteTs = emote.ts;
   spawnFloatingEmote(emote.emoji);
+  sfx.emote();
 }
 
 async function handleSendEmote(emoji) {
@@ -273,6 +319,7 @@ async function handleSendEmote(emoji) {
   const ts = Date.now();
   state.lastSeenEmoteTs = ts; // 自分の書き込みが戻ってきた時の二重再生を防ぐ
   spawnFloatingEmote(emoji); // 相手の応答を待たず、自分の画面にはすぐ出す
+  sfx.emote();
   try {
     await sendEmote(state.room.code, role, emoji);
   } catch (error) {
@@ -357,6 +404,7 @@ function handleSideGameTap() {
   updateSideGameDisplay();
   saveClickerState();
   spawnFloatingPop('+' + gain);
+  sfx.clickerTap();
   if (!$('sideGameShop').hidden) renderSideGameShop();
 }
 
@@ -423,6 +471,7 @@ function buyGenerator(key) {
   c.owned[key] = owned + 1;
   saveClickerState();
   updateSideGameDisplay();
+  sfx.purchase();
   renderSideGameShop();
 }
 function buyClickerUpgrade(key) {
@@ -434,6 +483,7 @@ function buyClickerUpgrade(key) {
   c.clickPower += u.power;
   saveClickerState();
   updateSideGameDisplay();
+  sfx.purchase();
   renderSideGameShop();
 }
 
@@ -541,6 +591,7 @@ function renderSelectingPuzzle(room) {
     $('backToListBtn').addEventListener('click', () => { state.previewPuzzleId = null; render(); });
     $('confirmPuzzleBtn').addEventListener('click', async () => {
       $('confirmPuzzleBtn').disabled = true;
+      sfx.room();
       await selectPuzzle(room.code, p.id);
     });
     return;
@@ -676,6 +727,7 @@ function renderPendingForHost(actionArea, room, role) {
         if (!text) { showToast('回答を入力してください'); return; }
         $('sendFreeAnswerBtn').disabled = true;
         state.freeAnswerMode = false;
+        sfx.answer();
         await answerQuestion(room.code, p, text);
       });
       $('cancelFreeAnswerBtn').addEventListener('click', () => { state.freeAnswerMode = false; render(); });
@@ -692,6 +744,7 @@ function renderPendingForHost(actionArea, room, role) {
     actionArea.querySelectorAll('[data-answer]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         actionArea.querySelectorAll('button').forEach((b) => (b.disabled = true));
+        sfx.answer();
         await answerQuestion(room.code, p, btn.dataset.answer);
       });
     });
@@ -707,10 +760,12 @@ function renderPendingForHost(actionArea, room, role) {
       </div>`;
     $('judgeCorrectBtn').addEventListener('click', async () => {
       actionArea.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      sfx.correct();
       await judgeGuess(room.code, p, true);
     });
     $('judgeIncorrectBtn').addEventListener('click', async () => {
       actionArea.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      sfx.incorrect();
       await judgeGuess(room.code, p, false);
     });
   }
@@ -729,11 +784,13 @@ function renderGuestInput(actionArea, room) {
     const text = $('questionInput').value.trim();
     if (!text) { showToast('質問を入力してください'); return; }
     $('sendQuestionBtn').disabled = true;
+    sfx.send();
     await submitPending(room.code, 'question', text);
   });
   $('useGuessBtn').addEventListener('click', async () => {
     const text = prompt('回答(真相はこうだと思う、という内容)を入力してください');
     if (!text || !text.trim()) return;
+    sfx.send();
     await submitPending(room.code, 'guess', text.trim());
   });
 }
@@ -749,6 +806,7 @@ function renderEnded(room) {
   const resultClass = isAborted ? 'is-aborted' : (isCorrect ? 'is-correct' : 'is-incorrect');
   const resultMark = isAborted ? '🚪' : (isCorrect ? '🎉' : '😵');
   const resultTitle = isAborted ? '途中終了' : (isCorrect ? '正解！' : '終了');
+  if (!isAborted) { if (isCorrect) sfx.win(); else sfx.lose(); }
   const logHtml = (room.log || []).map(logEntryLine).join('');
   app.innerHTML = `
     <section class="ended-view">
